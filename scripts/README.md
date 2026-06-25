@@ -1,4 +1,3 @@
-# Scripts
 
 ## `listar_clientes_omie.py`
 
