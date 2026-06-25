@@ -80,6 +80,11 @@ Extracao finalizada
 ```
 
 O script pagina automaticamente ate a API informar que nao existem mais registros e grava cada pagina somente na tabela `raw_omie_clientes`.
+As tags sao armazenadas em `tags`, para consultas simples, e em `tags_json`, preservando o retorno original da API.
+Todos os campos atuais da API possuem colunas correspondentes. Estruturas como
+dados bancarios, endereco de entrega, recomendacoes e informacoes de auditoria
+tambem sao preservadas em JSON. O retorno integral permanece em `dados_json` e
+`dados_flat_json`, protegendo a carga contra novos campos adicionados pela Omie.
 
 ## Banco Local
 

@@ -26,6 +26,40 @@ MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "omie_123")
 MYSQL_ADMIN_USER = os.getenv("MYSQL_ADMIN_USER", "root")
 MYSQL_ADMIN_PASSWORD = os.getenv("MYSQL_ADMIN_PASSWORD", "omie_root_123")
 
+CAMPOS_ADICIONAIS = {
+    "bloquear_faturamento": "CHAR(1) NULL",
+    "cidade_ibge": "VARCHAR(20) NULL",
+    "codigo_pais": "VARCHAR(20) NULL",
+    "complemento": "VARCHAR(160) NULL",
+    "contato": "VARCHAR(160) NULL",
+    "enviar_anexos": "CHAR(1) NULL",
+    "exterior": "CHAR(1) NULL",
+    "homepage": "VARCHAR(255) NULL",
+    "inscricao_estadual": "VARCHAR(30) NULL",
+    "inscricao_municipal": "VARCHAR(30) NULL",
+    "optante_simples_nacional": "CHAR(1) NULL",
+    "pessoa_fisica": "CHAR(1) NULL",
+    "banco_codigo": "VARCHAR(20) NULL",
+    "banco_agencia": "VARCHAR(30) NULL",
+    "banco_conta_corrente": "VARCHAR(40) NULL",
+    "banco_chave_pix": "VARCHAR(255) NULL",
+    "banco_documento_titular": "VARCHAR(30) NULL",
+    "banco_nome_titular": "VARCHAR(200) NULL",
+    "banco_transferencia_padrao": "CHAR(1) NULL",
+    "dados_bancarios_json": "JSON NULL",
+    "endereco_entrega_json": "JSON NULL",
+    "recomendacoes_gerar_boletos": "CHAR(1) NULL",
+    "recomendacoes_json": "JSON NULL",
+    "omie_importado_api": "CHAR(1) NULL",
+    "omie_data_inclusao": "VARCHAR(10) NULL",
+    "omie_hora_inclusao": "VARCHAR(8) NULL",
+    "omie_usuario_inclusao": "VARCHAR(80) NULL",
+    "omie_data_alteracao": "VARCHAR(10) NULL",
+    "omie_hora_alteracao": "VARCHAR(8) NULL",
+    "omie_usuario_alteracao": "VARCHAR(80) NULL",
+    "info_json": "JSON NULL",
+}
+
 
 class PaginaSemRegistros(Exception):
     pass
@@ -40,6 +74,28 @@ def texto(valor: Any) -> str | None:
         return None
     valor = str(valor).strip()
     return valor or None
+
+
+def extrair_tags(cliente: dict[str, Any]) -> tuple[str | None, str]:
+    tags_origem = cliente.get("tags")
+    if not isinstance(tags_origem, list):
+        return None, "[]"
+
+    nomes = []
+    for item in tags_origem:
+        nome = texto(item.get("tag")) if isinstance(item, dict) else texto(item)
+        if nome and nome not in nomes:
+            nomes.append(nome)
+
+    return "; ".join(nomes) or None, json.dumps(tags_origem, ensure_ascii=False)
+
+
+def objeto(valor: Any) -> dict[str, Any]:
+    return valor if isinstance(valor, dict) else {}
+
+
+def json_objeto(valor: Any) -> str:
+    return json.dumps(objeto(valor), ensure_ascii=False)
 
 
 def achatar_json(valor: Any, prefixo: str = "") -> dict[str, Any]:
@@ -140,6 +196,39 @@ def preparar_banco() -> None:
                     endereco_numero VARCHAR(20) NULL,
                     bairro VARCHAR(80) NULL,
                     inativo CHAR(1) NULL,
+                    bloquear_faturamento CHAR(1) NULL,
+                    cidade_ibge VARCHAR(20) NULL,
+                    codigo_pais VARCHAR(20) NULL,
+                    complemento VARCHAR(160) NULL,
+                    contato VARCHAR(160) NULL,
+                    enviar_anexos CHAR(1) NULL,
+                    exterior CHAR(1) NULL,
+                    homepage VARCHAR(255) NULL,
+                    inscricao_estadual VARCHAR(30) NULL,
+                    inscricao_municipal VARCHAR(30) NULL,
+                    optante_simples_nacional CHAR(1) NULL,
+                    pessoa_fisica CHAR(1) NULL,
+                    banco_codigo VARCHAR(20) NULL,
+                    banco_agencia VARCHAR(30) NULL,
+                    banco_conta_corrente VARCHAR(40) NULL,
+                    banco_chave_pix VARCHAR(255) NULL,
+                    banco_documento_titular VARCHAR(30) NULL,
+                    banco_nome_titular VARCHAR(200) NULL,
+                    banco_transferencia_padrao CHAR(1) NULL,
+                    dados_bancarios_json JSON NULL,
+                    endereco_entrega_json JSON NULL,
+                    recomendacoes_gerar_boletos CHAR(1) NULL,
+                    recomendacoes_json JSON NULL,
+                    omie_importado_api CHAR(1) NULL,
+                    omie_data_inclusao VARCHAR(10) NULL,
+                    omie_hora_inclusao VARCHAR(8) NULL,
+                    omie_usuario_inclusao VARCHAR(80) NULL,
+                    omie_data_alteracao VARCHAR(10) NULL,
+                    omie_hora_alteracao VARCHAR(8) NULL,
+                    omie_usuario_alteracao VARCHAR(80) NULL,
+                    info_json JSON NULL,
+                    tags TEXT NULL,
+                    tags_json JSON NOT NULL,
                     dados_json JSON NOT NULL,
                     dados_flat_json JSON NOT NULL,
                     extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -152,6 +241,28 @@ def preparar_banco() -> None:
                 COLLATE utf8mb4_unicode_ci
                 """
             )
+            cursor.execute(
+                """
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = %s
+                  AND TABLE_NAME = 'raw_omie_clientes'
+                """,
+                (MYSQL_DATABASE,),
+            )
+            colunas_existentes = {linha["COLUMN_NAME"] for linha in cursor.fetchall()}
+            campos_migracao = {
+                **CAMPOS_ADICIONAIS,
+                "tags": "TEXT NULL",
+                "tags_json": "JSON NULL",
+            }
+
+            for nome, definicao in campos_migracao.items():
+                if nome not in colunas_existentes:
+                    cursor.execute(
+                        f"ALTER TABLE raw_omie_clientes "
+                        f"ADD COLUMN `{nome}` {definicao}"
+                    )
         conn.commit()
 
 
@@ -176,6 +287,39 @@ def salvar_clientes_no_banco(clientes: list[dict[str, Any]]) -> int:
             endereco_numero,
             bairro,
             inativo,
+            bloquear_faturamento,
+            cidade_ibge,
+            codigo_pais,
+            complemento,
+            contato,
+            enviar_anexos,
+            exterior,
+            homepage,
+            inscricao_estadual,
+            inscricao_municipal,
+            optante_simples_nacional,
+            pessoa_fisica,
+            banco_codigo,
+            banco_agencia,
+            banco_conta_corrente,
+            banco_chave_pix,
+            banco_documento_titular,
+            banco_nome_titular,
+            banco_transferencia_padrao,
+            dados_bancarios_json,
+            endereco_entrega_json,
+            recomendacoes_gerar_boletos,
+            recomendacoes_json,
+            omie_importado_api,
+            omie_data_inclusao,
+            omie_hora_inclusao,
+            omie_usuario_inclusao,
+            omie_data_alteracao,
+            omie_hora_alteracao,
+            omie_usuario_alteracao,
+            info_json,
+            tags,
+            tags_json,
             dados_json,
             dados_flat_json
         )
@@ -195,6 +339,39 @@ def salvar_clientes_no_banco(clientes: list[dict[str, Any]]) -> int:
             %(endereco_numero)s,
             %(bairro)s,
             %(inativo)s,
+            %(bloquear_faturamento)s,
+            %(cidade_ibge)s,
+            %(codigo_pais)s,
+            %(complemento)s,
+            %(contato)s,
+            %(enviar_anexos)s,
+            %(exterior)s,
+            %(homepage)s,
+            %(inscricao_estadual)s,
+            %(inscricao_municipal)s,
+            %(optante_simples_nacional)s,
+            %(pessoa_fisica)s,
+            %(banco_codigo)s,
+            %(banco_agencia)s,
+            %(banco_conta_corrente)s,
+            %(banco_chave_pix)s,
+            %(banco_documento_titular)s,
+            %(banco_nome_titular)s,
+            %(banco_transferencia_padrao)s,
+            %(dados_bancarios_json)s,
+            %(endereco_entrega_json)s,
+            %(recomendacoes_gerar_boletos)s,
+            %(recomendacoes_json)s,
+            %(omie_importado_api)s,
+            %(omie_data_inclusao)s,
+            %(omie_hora_inclusao)s,
+            %(omie_usuario_inclusao)s,
+            %(omie_data_alteracao)s,
+            %(omie_hora_alteracao)s,
+            %(omie_usuario_alteracao)s,
+            %(info_json)s,
+            %(tags)s,
+            %(tags_json)s,
             %(dados_json)s,
             %(dados_flat_json)s
         )
@@ -213,6 +390,39 @@ def salvar_clientes_no_banco(clientes: list[dict[str, Any]]) -> int:
             endereco_numero = VALUES(endereco_numero),
             bairro = VALUES(bairro),
             inativo = VALUES(inativo),
+            bloquear_faturamento = VALUES(bloquear_faturamento),
+            cidade_ibge = VALUES(cidade_ibge),
+            codigo_pais = VALUES(codigo_pais),
+            complemento = VALUES(complemento),
+            contato = VALUES(contato),
+            enviar_anexos = VALUES(enviar_anexos),
+            exterior = VALUES(exterior),
+            homepage = VALUES(homepage),
+            inscricao_estadual = VALUES(inscricao_estadual),
+            inscricao_municipal = VALUES(inscricao_municipal),
+            optante_simples_nacional = VALUES(optante_simples_nacional),
+            pessoa_fisica = VALUES(pessoa_fisica),
+            banco_codigo = VALUES(banco_codigo),
+            banco_agencia = VALUES(banco_agencia),
+            banco_conta_corrente = VALUES(banco_conta_corrente),
+            banco_chave_pix = VALUES(banco_chave_pix),
+            banco_documento_titular = VALUES(banco_documento_titular),
+            banco_nome_titular = VALUES(banco_nome_titular),
+            banco_transferencia_padrao = VALUES(banco_transferencia_padrao),
+            dados_bancarios_json = VALUES(dados_bancarios_json),
+            endereco_entrega_json = VALUES(endereco_entrega_json),
+            recomendacoes_gerar_boletos = VALUES(recomendacoes_gerar_boletos),
+            recomendacoes_json = VALUES(recomendacoes_json),
+            omie_importado_api = VALUES(omie_importado_api),
+            omie_data_inclusao = VALUES(omie_data_inclusao),
+            omie_hora_inclusao = VALUES(omie_hora_inclusao),
+            omie_usuario_inclusao = VALUES(omie_usuario_inclusao),
+            omie_data_alteracao = VALUES(omie_data_alteracao),
+            omie_hora_alteracao = VALUES(omie_hora_alteracao),
+            omie_usuario_alteracao = VALUES(omie_usuario_alteracao),
+            info_json = VALUES(info_json),
+            tags = VALUES(tags),
+            tags_json = VALUES(tags_json),
             dados_json = VALUES(dados_json),
             dados_flat_json = VALUES(dados_flat_json)
     """
@@ -225,6 +435,10 @@ def salvar_clientes_no_banco(clientes: list[dict[str, Any]]) -> int:
         if not codigo_omie:
             continue
 
+        tags, tags_json = extrair_tags(cliente)
+        dados_bancarios = objeto(cliente.get("dadosBancarios"))
+        recomendacoes = objeto(cliente.get("recomendacoes"))
+        info = objeto(cliente.get("info"))
         registros_raw.append(
             {
                 "codigo_cliente_omie": int(codigo_omie),
@@ -242,6 +456,39 @@ def salvar_clientes_no_banco(clientes: list[dict[str, Any]]) -> int:
                 "endereco_numero": texto(cliente.get("endereco_numero")),
                 "bairro": texto(cliente.get("bairro")),
                 "inativo": texto(cliente.get("inativo")),
+                "bloquear_faturamento": texto(cliente.get("bloquear_faturamento")),
+                "cidade_ibge": texto(cliente.get("cidade_ibge")),
+                "codigo_pais": texto(cliente.get("codigo_pais")),
+                "complemento": texto(cliente.get("complemento")),
+                "contato": texto(cliente.get("contato")),
+                "enviar_anexos": texto(cliente.get("enviar_anexos")),
+                "exterior": texto(cliente.get("exterior")),
+                "homepage": texto(cliente.get("homepage")),
+                "inscricao_estadual": texto(cliente.get("inscricao_estadual")),
+                "inscricao_municipal": texto(cliente.get("inscricao_municipal")),
+                "optante_simples_nacional": texto(cliente.get("optante_simples_nacional")),
+                "pessoa_fisica": texto(cliente.get("pessoa_fisica")),
+                "banco_codigo": texto(dados_bancarios.get("codigo_banco")),
+                "banco_agencia": texto(dados_bancarios.get("agencia")),
+                "banco_conta_corrente": texto(dados_bancarios.get("conta_corrente")),
+                "banco_chave_pix": texto(dados_bancarios.get("cChavePix")),
+                "banco_documento_titular": somente_digitos(dados_bancarios.get("doc_titular")) or None,
+                "banco_nome_titular": texto(dados_bancarios.get("nome_titular")),
+                "banco_transferencia_padrao": texto(dados_bancarios.get("transf_padrao")),
+                "dados_bancarios_json": json_objeto(cliente.get("dadosBancarios")),
+                "endereco_entrega_json": json_objeto(cliente.get("enderecoEntrega")),
+                "recomendacoes_gerar_boletos": texto(recomendacoes.get("gerar_boletos")),
+                "recomendacoes_json": json_objeto(cliente.get("recomendacoes")),
+                "omie_importado_api": texto(info.get("cImpAPI")),
+                "omie_data_inclusao": texto(info.get("dInc")),
+                "omie_hora_inclusao": texto(info.get("hInc")),
+                "omie_usuario_inclusao": texto(info.get("uInc")),
+                "omie_data_alteracao": texto(info.get("dAlt")),
+                "omie_hora_alteracao": texto(info.get("hAlt")),
+                "omie_usuario_alteracao": texto(info.get("uAlt")),
+                "info_json": json_objeto(cliente.get("info")),
+                "tags": tags,
+                "tags_json": tags_json,
                 "dados_json": json.dumps(cliente, ensure_ascii=False),
                 "dados_flat_json": json.dumps(flat, ensure_ascii=False),
             }
