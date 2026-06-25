@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.tmp/
+
+# Ambiente e credenciais
+.env
+*.local
+
+# Saidas geradas
+arquivos/*.csv
+arquivos/*.xlsx
+arquivos/*.json
+!arquivos/.gitkeep
+
+# Banco local
+banco/mysql/data/
+*.db
+*.sqlite
+
+# Sistema/IDE
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,44 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: omie_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: omie_root_123
+      MYSQL_DATABASE: omie_db
+      MYSQL_USER: omie_user
+      MYSQL_PASSWORD: omie_123
+      TZ: America/Sao_Paulo
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: omie_phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: omie_root_123
+      UPLOAD_LIMIT: 256M
+      TZ: America/Sao_Paulo
+    ports:
+      - "8080:80"
+
+volumes:
+  mysql_data:
