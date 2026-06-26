@@ -7,6 +7,8 @@ venv/
 
 # Ambiente e credenciais
 .env
+logs/*.log
+logs/*.json
 *.local
 
 # Saidas geradas

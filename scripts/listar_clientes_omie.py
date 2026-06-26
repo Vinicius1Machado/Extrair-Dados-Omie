@@ -1,7 +1,10 @@
+import argparse
 import json
+import logging
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +16,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 API_URL = "https://app.omie.com.br/api/v1/geral/clientes/"
 REGISTROS_POR_PAGINA = 50
+MAX_TENTATIVAS = 5
+INTERVALO_ENTRE_PAGINAS = 0.3
+LOG_DIR = BASE_DIR / "logs"
+LOG_FILE = LOG_DIR / "listar_clientes_omie.log"
+CHECKPOINT_FILE = LOG_DIR / "listar_clientes_omie.checkpoint.json"
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -63,6 +71,49 @@ CAMPOS_ADICIONAIS = {
 
 class PaginaSemRegistros(Exception):
     pass
+
+
+def configurar_logging() -> None:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_FILE, encoding="utf-8"),
+            logging.StreamHandler(sys.stdout),
+        ],
+        force=True,
+    )
+
+
+def carregar_checkpoint() -> int:
+    if not CHECKPOINT_FILE.exists():
+        return 0
+
+    try:
+        dados = json.loads(CHECKPOINT_FILE.read_text(encoding="utf-8"))
+        return max(int(dados.get("ultima_pagina_concluida", 0)), 0)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        logging.warning("Checkpoint invalido. A extracao sera iniciada do comeco.")
+        return 0
+
+
+def salvar_checkpoint(pagina: int, total_registros: int) -> None:
+    CHECKPOINT_FILE.write_text(
+        json.dumps(
+            {
+                "ultima_pagina_concluida": pagina,
+                "total_registros_processados": total_registros,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def remover_checkpoint() -> None:
+    CHECKPOINT_FILE.unlink(missing_ok=True)
 
 
 def somente_digitos(valor: Any) -> str:
@@ -127,23 +178,41 @@ def chamar_api(pagina: int) -> dict[str, Any]:
         "app_secret": APP_SECRET,
     }
 
-    response = requests.post(API_URL, json=payload, timeout=60)
-
-    if response.status_code == 500:
+    for tentativa in range(1, MAX_TENTATIVAS + 1):
         try:
-            erro = response.json()
-        except ValueError:
-            erro = {}
+            response = requests.post(API_URL, json=payload, timeout=(15, 90))
 
-        if erro.get("faultcode") == "SOAP-ENV:Client-5113":
-            raise PaginaSemRegistros
+            if response.status_code == 500:
+                try:
+                    erro = response.json()
+                except ValueError:
+                    erro = {}
 
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as exc:
-        raise RuntimeError(f"Erro HTTP {response.status_code} ao chamar a API: {response.text}") from exc
+                if erro.get("faultcode") == "SOAP-ENV:Client-5113":
+                    raise PaginaSemRegistros
 
-    return response.json()
+            response.raise_for_status()
+            return response.json()
+        except PaginaSemRegistros:
+            raise
+        except (requests.RequestException, ValueError) as exc:
+            if tentativa == MAX_TENTATIVAS:
+                raise RuntimeError(
+                    f"Falha na pagina {pagina} apos {MAX_TENTATIVAS} tentativas: {exc}"
+                ) from exc
+
+            espera = min(2 ** (tentativa - 1), 30)
+            logging.warning(
+                "Pagina %s falhou na tentativa %s/%s: %s. Nova tentativa em %ss.",
+                pagina,
+                tentativa,
+                MAX_TENTATIVAS,
+                exc,
+                espera,
+            )
+            time.sleep(espera)
+
+    raise RuntimeError(f"Nao foi possivel consultar a pagina {pagina}.")
 
 
 def conectar_mysql(usar_banco: bool = True, admin: bool = False) -> pymysql.connections.Connection:
@@ -502,47 +571,85 @@ def salvar_clientes_no_banco(clientes: list[dict[str, Any]]) -> int:
     return len(registros_raw)
 
 
-def extrair_e_salvar() -> int:
-    pagina = 1
+def extrair_e_salvar(pagina_inicial: int | None = None) -> int:
+    ultima_pagina = carregar_checkpoint()
+    pagina = pagina_inicial or (ultima_pagina + 1 if ultima_pagina else 1)
     total = 0
+    total_paginas: int | None = None
+
+    if pagina > 1:
+        logging.info("Retomando a extracao a partir da pagina %s.", pagina)
 
     while True:
         try:
             dados = chamar_api(pagina)
         except PaginaSemRegistros:
-            print(f"Pagina {pagina} sem clientes. Fim da consulta.")
+            logging.info("Pagina %s sem clientes. Fim da consulta.", pagina)
             break
 
         clientes_pagina = dados.get("clientes_cadastro", [])
+        total_paginas_api = dados.get("total_de_paginas")
+        if total_paginas_api is not None:
+            total_paginas = int(total_paginas_api)
 
         if not isinstance(clientes_pagina, list):
             raise RuntimeError("Resposta inesperada: campo 'clientes_cadastro' nao e uma lista.")
 
         if not clientes_pagina:
-            print(f"Pagina {pagina} sem clientes. Fim da consulta.")
+            logging.info("Pagina %s sem clientes. Fim da consulta.", pagina)
             break
 
         salvos = salvar_clientes_no_banco(clientes_pagina)
         total += salvos
-        print(f"Pagina {pagina} processada: {salvos} clientes gravados no banco")
-        pagina += 1
+        salvar_checkpoint(pagina, total)
+        logging.info(
+            "Pagina %s/%s processada: %s clientes gravados no banco.",
+            pagina,
+            total_paginas or "?",
+            salvos,
+        )
 
+        if total_paginas is not None and pagina >= total_paginas:
+            logging.info("Ultima pagina informada pela API processada.")
+            break
+
+        pagina += 1
+        time.sleep(INTERVALO_ENTRE_PAGINAS)
+
+    remover_checkpoint()
     return total
 
 
+def argumentos() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Extrai clientes da API Omie para o MySQL.")
+    parser.add_argument(
+        "--pagina-inicial",
+        type=int,
+        help="Pagina inicial da extracao. Sobrescreve um checkpoint existente.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    configurar_logging()
+    args = argumentos()
+
     if not APP_KEY or not APP_SECRET:
-        print("Defina OMIE_APP_KEY e OMIE_APP_SECRET no arquivo .env.", file=sys.stderr)
+        logging.error("Defina OMIE_APP_KEY e OMIE_APP_SECRET no arquivo .env.")
         return 1
 
     try:
         preparar_banco()
-        total = extrair_e_salvar()
-    except (pymysql.MySQLError, requests.RequestException, RuntimeError) as exc:
-        print(f"Erro ao executar extracao: {exc}", file=sys.stderr)
+        total = extrair_e_salvar(args.pagina_inicial)
+    except (pymysql.MySQLError, requests.RequestException, RuntimeError, OSError) as exc:
+        logging.exception("Erro ao executar extracao: %s", exc)
         return 1
 
-    print(f"Extracao finalizada: {total} clientes gravados no banco {MYSQL_DATABASE}.")
+    logging.info(
+        "Extracao finalizada: %s clientes gravados no banco %s.",
+        total,
+        MYSQL_DATABASE,
+    )
     return 0
 
 

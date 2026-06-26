@@ -63,3 +63,27 @@ CREATE TABLE IF NOT EXISTS raw_omie_clientes (
 )
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS raw_omie_clientes_caracteristicas (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  codigo_cliente_omie BIGINT NOT NULL,
+  codigo_cliente_integracao VARCHAR(60) NULL,
+  numero_sequencia INT NOT NULL,
+  campo VARCHAR(30) NULL,
+  conteudo VARCHAR(60) NULL,
+  caracteristica_json JSON NOT NULL,
+  resposta_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_raw_omie_cli_caract_cliente (codigo_cliente_omie),
+  KEY idx_raw_omie_cli_caract_campo (campo),
+  CONSTRAINT fk_raw_omie_cli_caract_cliente
+    FOREIGN KEY (codigo_cliente_omie)
+    REFERENCES raw_omie_clientes (codigo_cliente_omie)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;

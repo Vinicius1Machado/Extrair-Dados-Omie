@@ -27,6 +27,31 @@ Execucao:
 python scripts\listar_clientes_omie.py
 ```
 
+## `listar_clientes_caracteristicas_omie.py`
+
+Consulta a API `Clientes - Caracteristicas` para os clientes/fornecedores ja
+gravados em `raw_omie_clientes` e gera:
+
+```text
+registros no MySQL:
+- `raw_omie_clientes_caracteristicas`
+```
+
+Cada linha representa uma caracteristica do cliente/fornecedor, vinculada por
+`codigo_cliente_omie`.
+
+Execucao:
+
+```powershell
+python scripts\listar_clientes_caracteristicas_omie.py
+```
+
+Teste com poucos clientes:
+
+```powershell
+python scripts\listar_clientes_caracteristicas_omie.py --limite 10 --ignorar-checkpoint
+```
+
 ## `setup_ambiente_python.ps1`
 
 Cria o ambiente virtual `.venv` e instala as dependencias do `requirements.txt`.
