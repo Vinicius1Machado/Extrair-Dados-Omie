@@ -12,9 +12,12 @@ import pymysql
 import requests
 from dotenv import load_dotenv
 
+import listar_clientes_omie
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 API_URL = "https://app.omie.com.br/api/v1/financas/contapagar/"
+CLIENTES_API_URL = "https://app.omie.com.br/api/v1/geral/clientes/"
 REGISTROS_POR_PAGINA = 20
 MAX_TENTATIVAS = 5
 INTERVALO_ENTRE_PAGINAS = 0.3
@@ -192,6 +195,50 @@ def chamar_api(pagina: int) -> dict[str, Any]:
     raise RuntimeError(f"Nao foi possivel consultar a pagina {pagina}.")
 
 
+def consultar_cliente(codigo_cliente_omie: int) -> dict[str, Any]:
+    payload = {
+        "call": "ConsultarCliente",
+        "param": [
+            {
+                "codigo_cliente_omie": codigo_cliente_omie,
+                "codigo_cliente_integracao": "",
+            }
+        ],
+        "app_key": APP_KEY,
+        "app_secret": APP_SECRET,
+    }
+
+    for tentativa in range(1, MAX_TENTATIVAS + 1):
+        try:
+            response = requests.post(CLIENTES_API_URL, json=payload, timeout=(15, 90))
+            response.raise_for_status()
+            dados = response.json()
+            if not isinstance(dados, dict):
+                raise RuntimeError("Resposta inesperada: JSON raiz nao e um objeto.")
+            if dados.get("faultcode"):
+                raise RuntimeError(dados.get("faultstring") or dados.get("faultcode"))
+            return dados
+        except (requests.RequestException, ValueError, RuntimeError) as exc:
+            if tentativa == MAX_TENTATIVAS:
+                raise RuntimeError(
+                    "Falha ao consultar fornecedor "
+                    f"{codigo_cliente_omie} apos {MAX_TENTATIVAS} tentativas: {exc}"
+                ) from exc
+
+            espera = min(2 ** (tentativa - 1), 30)
+            logging.warning(
+                "Fornecedor %s falhou na tentativa %s/%s: %s. Nova tentativa em %ss.",
+                codigo_cliente_omie,
+                tentativa,
+                MAX_TENTATIVAS,
+                exc,
+                espera,
+            )
+            time.sleep(espera)
+
+    raise RuntimeError(f"Nao foi possivel consultar o fornecedor {codigo_cliente_omie}.")
+
+
 def conectar_mysql(usar_banco: bool = True, admin: bool = False) -> pymysql.connections.Connection:
     return pymysql.connect(
         host=MYSQL_HOST,
@@ -310,10 +357,62 @@ def preparar_banco() -> None:
         conn.commit()
 
 
+def buscar_fornecedores_ausentes(contas: list[Any]) -> list[int]:
+    codigos = sorted(
+        {
+            codigo
+            for conta in contas
+            if isinstance(conta, dict)
+            for codigo in [inteiro(conta.get("codigo_cliente_fornecedor"))]
+            if codigo
+        }
+    )
+
+    if not codigos:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(codigos))
+    with conectar_mysql() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT codigo_cliente_omie
+                FROM raw_omie_clientes
+                WHERE codigo_cliente_omie IN ({placeholders})
+                """,
+                codigos,
+            )
+            existentes = {int(linha["codigo_cliente_omie"]) for linha in cursor.fetchall()}
+
+    return [codigo for codigo in codigos if codigo not in existentes]
+
+
+def garantir_fornecedores_cadastrados(contas: list[Any]) -> int:
+    codigos_ausentes = buscar_fornecedores_ausentes(contas)
+    if not codigos_ausentes:
+        return 0
+
+    logging.warning(
+        "Encontrados %s fornecedores ausentes em raw_omie_clientes: %s. "
+        "Consultando cadastros antes de gravar contas a pagar.",
+        len(codigos_ausentes),
+        codigos_ausentes,
+    )
+    fornecedores = [consultar_cliente(codigo) for codigo in codigos_ausentes]
+    return listar_clientes_omie.salvar_clientes_no_banco(fornecedores)
+
+
 def salvar_contas_pagar_no_banco(dados: dict[str, Any]) -> int:
     contas = dados.get("conta_pagar_cadastro", [])
     if not isinstance(contas, list):
         raise RuntimeError("Resposta inesperada: campo 'conta_pagar_cadastro' nao e uma lista.")
+
+    fornecedores_inseridos = garantir_fornecedores_cadastrados(contas)
+    if fornecedores_inseridos:
+        logging.info(
+            "%s fornecedores ausentes foram gravados em raw_omie_clientes.",
+            fornecedores_inseridos,
+        )
 
     registros = []
     for conta in contas:
