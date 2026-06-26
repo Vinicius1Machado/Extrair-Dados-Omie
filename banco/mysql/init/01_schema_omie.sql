@@ -4,6 +4,21 @@ CREATE DATABASE IF NOT EXISTS omie_db
 
 USE omie_db;
 
+CREATE TABLE IF NOT EXISTS raw_omie_paises (
+  codigo_pais VARCHAR(20) NOT NULL,
+  codigo_iso CHAR(2) NULL,
+  descricao VARCHAR(120) NULL,
+  dados_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (codigo_pais),
+  KEY idx_raw_omie_paises_codigo_iso (codigo_iso),
+  KEY idx_raw_omie_paises_descricao (descricao)
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS raw_omie_clientes (
   codigo_cliente_omie BIGINT NOT NULL,
   codigo_cliente_integracao VARCHAR(120) NULL,
@@ -59,7 +74,13 @@ CREATE TABLE IF NOT EXISTS raw_omie_clientes (
   atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (codigo_cliente_omie),
   KEY idx_raw_omie_clientes_cnpj_cpf (cnpj_cpf),
-  KEY idx_raw_omie_clientes_integracao (codigo_cliente_integracao)
+  KEY idx_raw_omie_clientes_integracao (codigo_cliente_integracao),
+  KEY idx_raw_omie_clientes_codigo_pais (codigo_pais),
+  CONSTRAINT fk_raw_omie_clientes_pais
+    FOREIGN KEY (codigo_pais)
+    REFERENCES raw_omie_paises (codigo_pais)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT
 )
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
@@ -84,6 +105,222 @@ CREATE TABLE IF NOT EXISTS raw_omie_clientes_caracteristicas (
     REFERENCES raw_omie_clientes (codigo_cliente_omie)
     ON UPDATE CASCADE
     ON DELETE CASCADE
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS raw_omie_clientes_tags (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  codigo_cliente_omie BIGINT NOT NULL,
+  codigo_cliente_integracao VARCHAR(120) NULL,
+  numero_sequencia INT NOT NULL,
+  codigo_tag BIGINT NULL,
+  tag VARCHAR(120) NULL,
+  tag_json JSON NOT NULL,
+  resposta_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_raw_omie_cli_tags_cliente (codigo_cliente_omie),
+  KEY idx_raw_omie_cli_tags_codigo_tag (codigo_tag),
+  KEY idx_raw_omie_cli_tags_tag (tag),
+  CONSTRAINT fk_raw_omie_cli_tags_cliente
+    FOREIGN KEY (codigo_cliente_omie)
+    REFERENCES raw_omie_clientes (codigo_cliente_omie)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS raw_omie_empresas (
+  codigo_empresa BIGINT NOT NULL,
+  cnpj VARCHAR(30) NULL,
+  razao_social VARCHAR(200) NULL,
+  nome_fantasia VARCHAR(200) NULL,
+  email VARCHAR(241) NULL,
+  telefone1_ddd VARCHAR(10) NULL,
+  telefone1_numero VARCHAR(30) NULL,
+  telefone2_ddd VARCHAR(10) NULL,
+  telefone2_numero VARCHAR(30) NULL,
+  fax_ddd VARCHAR(10) NULL,
+  fax_numero VARCHAR(30) NULL,
+  website VARCHAR(255) NULL,
+  cidade VARCHAR(100) NULL,
+  estado VARCHAR(80) NULL,
+  cep VARCHAR(20) NULL,
+  endereco VARCHAR(160) NULL,
+  endereco_numero VARCHAR(20) NULL,
+  bairro VARCHAR(80) NULL,
+  complemento VARCHAR(160) NULL,
+  logradouro VARCHAR(160) NULL,
+  codigo_pais VARCHAR(20) NULL,
+  cnae VARCHAR(20) NULL,
+  cnae_municipal VARCHAR(30) NULL,
+  inscricao_estadual VARCHAR(30) NULL,
+  inscricao_municipal VARCHAR(30) NULL,
+  inscricao_suframa VARCHAR(30) NULL,
+  regime_tributario VARCHAR(20) NULL,
+  optante_simples_nacional CHAR(1) NULL,
+  gera_nfse CHAR(1) NULL,
+  inativa CHAR(1) NULL,
+  pdv_sincr_analitica CHAR(1) NULL,
+  csc_homologacao VARCHAR(255) NULL,
+  csc_id_homologacao VARCHAR(80) NULL,
+  csc_producao VARCHAR(255) NULL,
+  csc_id_producao VARCHAR(80) NULL,
+  ecd_codigo_cadastral VARCHAR(80) NULL,
+  ecd_codigo_instituicao_responsavel VARCHAR(80) NULL,
+  efd_atividade_industrial VARCHAR(80) NULL,
+  efd_perfil_arquivo_fiscal VARCHAR(80) NULL,
+  sped_codigo_criterio_escrituracao VARCHAR(80) NULL,
+  sped_codigo_incidencia_tributaria VARCHAR(80) NULL,
+  sped_codigo_indicador_apropriacao_credito VARCHAR(80) NULL,
+  sped_codigo_tipo_atividade VARCHAR(80) NULL,
+  sped_codigo_tipo_contribuicao VARCHAR(80) NULL,
+  sped_cpf_contador VARCHAR(30) NULL,
+  sped_crc_contador VARCHAR(80) NULL,
+  sped_email_contador VARCHAR(241) NULL,
+  sped_junta_comercial VARCHAR(80) NULL,
+  sped_matriz VARCHAR(80) NULL,
+  sped_natureza_pessoa_juridica VARCHAR(80) NULL,
+  sped_nome_contador VARCHAR(200) NULL,
+  sped_registro_junta_comercial VARCHAR(80) NULL,
+  sped_usa_contabilidade_terceirizada VARCHAR(80) NULL,
+  pagina_api INT NULL,
+  total_de_paginas_api INT NULL,
+  registros_api INT NULL,
+  total_de_registros_api INT NULL,
+  produto_servico_resumido_json JSON NOT NULL,
+  dados_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (codigo_empresa),
+  KEY idx_raw_omie_empresas_cnpj (cnpj),
+  KEY idx_raw_omie_empresas_razao_social (razao_social)
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS raw_omie_bancos (
+  codigo VARCHAR(20) NOT NULL,
+  nome VARCHAR(200) NULL,
+  tipo VARCHAR(20) NULL,
+  pagina_api INT NULL,
+  total_de_paginas_api INT NULL,
+  registros_api INT NULL,
+  total_de_registros_api INT NULL,
+  dados_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (codigo),
+  KEY idx_raw_omie_bancos_nome (nome),
+  KEY idx_raw_omie_bancos_tipo (tipo)
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS raw_omie_cidades (
+  codigo VARCHAR(120) NOT NULL,
+  nome VARCHAR(120) NULL,
+  uf CHAR(2) NULL,
+  codigo_ibge VARCHAR(20) NULL,
+  codigo_siafi INT NULL,
+  pagina_api INT NULL,
+  total_de_paginas_api INT NULL,
+  registros_api INT NULL,
+  total_de_registros_api INT NULL,
+  dados_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (codigo),
+  KEY idx_raw_omie_cidades_nome (nome),
+  KEY idx_raw_omie_cidades_uf (uf),
+  KEY idx_raw_omie_cidades_ibge (codigo_ibge)
+)
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS raw_omie_contas_pagar (
+  codigo_lancamento_omie BIGINT NOT NULL,
+  codigo_lancamento_integracao VARCHAR(120) NULL,
+  codigo_cliente_fornecedor BIGINT NOT NULL,
+  codigo_categoria VARCHAR(40) NULL,
+  codigo_tipo_documento VARCHAR(20) NULL,
+  codigo_projeto BIGINT NULL,
+  id_conta_corrente BIGINT NULL,
+  id_origem VARCHAR(20) NULL,
+  numero_documento VARCHAR(120) NULL,
+  numero_documento_fiscal VARCHAR(120) NULL,
+  numero_parcela VARCHAR(30) NULL,
+  codigo_barras_ficha_compensacao VARCHAR(255) NULL,
+  data_emissao VARCHAR(10) NULL,
+  data_entrada VARCHAR(10) NULL,
+  data_previsao VARCHAR(10) NULL,
+  data_vencimento VARCHAR(10) NULL,
+  valor_documento DECIMAL(18, 4) NULL,
+  valor_cofins DECIMAL(18, 4) NULL,
+  valor_csll DECIMAL(18, 4) NULL,
+  valor_ir DECIMAL(18, 4) NULL,
+  valor_iss DECIMAL(18, 4) NULL,
+  valor_pis DECIMAL(18, 4) NULL,
+  retem_cofins CHAR(1) NULL,
+  retem_csll CHAR(1) NULL,
+  retem_inss CHAR(1) NULL,
+  retem_ir CHAR(1) NULL,
+  retem_iss CHAR(1) NULL,
+  retem_pis CHAR(1) NULL,
+  status_titulo VARCHAR(40) NULL,
+  bloqueado CHAR(1) NULL,
+  baixa_bloqueada CHAR(1) NULL,
+  bloquear_exclusao CHAR(1) NULL,
+  cnab_codigo_forma_pagamento VARCHAR(20) NULL,
+  cnab_codigo_barras_boleto VARCHAR(255) NULL,
+  cnab_juros_boleto DECIMAL(18, 4) NULL,
+  cnab_multa_boleto DECIMAL(18, 4) NULL,
+  cnab_pix_qrcode TEXT NULL,
+  cnab_banco_transferencia VARCHAR(20) NULL,
+  cnab_agencia_transferencia VARCHAR(30) NULL,
+  cnab_conta_corrente_transferencia VARCHAR(60) NULL,
+  cnab_cpf_cnpj_transferencia VARCHAR(30) NULL,
+  cnab_nome_transferencia VARCHAR(200) NULL,
+  cnab_finalidade_transferencia VARCHAR(80) NULL,
+  omie_importado_api CHAR(1) NULL,
+  omie_data_inclusao VARCHAR(10) NULL,
+  omie_hora_inclusao VARCHAR(8) NULL,
+  omie_usuario_inclusao VARCHAR(80) NULL,
+  omie_data_alteracao VARCHAR(10) NULL,
+  omie_hora_alteracao VARCHAR(8) NULL,
+  omie_usuario_alteracao VARCHAR(80) NULL,
+  pagina_api INT NULL,
+  total_de_paginas_api INT NULL,
+  registros_api INT NULL,
+  total_de_registros_api INT NULL,
+  categorias_json JSON NOT NULL,
+  distribuicao_json JSON NOT NULL,
+  cnab_integracao_bancaria_json JSON NOT NULL,
+  info_json JSON NOT NULL,
+  dados_json JSON NOT NULL,
+  dados_flat_json JSON NOT NULL,
+  extraido_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (codigo_lancamento_omie),
+  KEY idx_raw_omie_cp_fornecedor (codigo_cliente_fornecedor),
+  KEY idx_raw_omie_cp_categoria (codigo_categoria),
+  KEY idx_raw_omie_cp_conta_corrente (id_conta_corrente),
+  KEY idx_raw_omie_cp_projeto (codigo_projeto),
+  KEY idx_raw_omie_cp_tipo_documento (codigo_tipo_documento),
+  KEY idx_raw_omie_cp_status (status_titulo),
+  KEY idx_raw_omie_cp_vencimento (data_vencimento),
+  CONSTRAINT fk_raw_omie_cp_fornecedor
+    FOREIGN KEY (codigo_cliente_fornecedor)
+    REFERENCES raw_omie_clientes (codigo_cliente_omie)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT
 )
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
