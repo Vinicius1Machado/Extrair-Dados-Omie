@@ -180,6 +180,66 @@ Teste de pagina unica:
 python scripts\listar_contas_pagar_omie.py --pagina-inicial 1 --pagina-final 1
 ```
 
+## `listar_contas_receber_omie.py`
+
+Extrai contas a receber da API Omie e gera:
+
+```text
+registros no MySQL:
+- `raw_omie_contas_receber`
+```
+
+Relacionamento principal:
+
+```text
+raw_omie_contas_receber.codigo_cliente_fornecedor -> raw_omie_clientes.codigo_cliente_omie
+```
+
+O script tambem cria indices para futuras vinculacoes financeiras:
+`codigo_categoria`, `id_conta_corrente`, `codigo_projeto` e `codigo_tipo_documento`.
+
+Execucao completa:
+
+```powershell
+python scripts\listar_contas_receber_omie.py
+```
+
+Teste de pagina unica:
+
+```powershell
+python scripts\listar_contas_receber_omie.py --pagina-inicial 1 --pagina-final 1
+```
+
+## `listar_titulos_lancados_omie.py`
+
+Extrai titulos lancados da API `PesquisarLancamentos` e gera:
+
+```text
+registros no MySQL:
+- `raw_omie_titulos_lancados`
+```
+
+Relacionamento principal:
+
+```text
+raw_omie_titulos_lancados.codigo_cliente -> raw_omie_clientes.codigo_cliente_omie
+```
+
+O script guarda o titulo consolidado, os lancamentos, os departamentos e o resumo
+em JSON, alem dos principais campos em colunas consultaveis.
+
+Execucao completa:
+
+```powershell
+python scripts\listar_titulos_lancados_omie.py
+```
+
+Teste de pagina unica:
+
+```powershell
+python scripts\listar_titulos_lancados_omie.py --pagina-inicial 1 --pagina-final 1
+```
+
 ## `setup_ambiente_python.ps1`
 
 Cria o ambiente virtual `.venv` e instala as dependencias do `requirements.txt`.
