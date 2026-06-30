@@ -240,6 +240,44 @@ Teste de pagina unica:
 python scripts\listar_titulos_lancados_omie.py --pagina-inicial 1 --pagina-final 1
 ```
 
+## `listar_movimentos_financeiros_omie.py`
+
+Extrai movimentos financeiros da API `ListarMovimentos` e gera:
+
+```text
+registros no MySQL:
+- `raw_omie_movimentos_financeiros`
+```
+
+Relacionamento principal:
+
+```text
+raw_omie_movimentos_financeiros.codigo_cliente -> raw_omie_clientes.codigo_cliente_omie
+raw_omie_movimentos_financeiros.codigo_titulo_vinculado -> raw_omie_titulos_lancados.codigo_titulo
+```
+
+Os dois relacionamentos usam chaves estrangeiras. Movimentos exclusivamente
+bancarios podem nao possuir cliente ou titulo; nesses casos, os campos de
+vinculo ficam nulos e o registro e identificado pelo codigo do movimento da
+conta corrente. O campo `codigo_titulo` preserva o valor bruto retornado pela
+API, inclusive para previsoes que ainda nao existem como titulo financeiro; o
+campo `codigo_titulo_vinculado` recebe somente codigos encontrados na tabela de
+titulos. A extracao solicita tambem dados cadastrais e distribuicoes por
+categoria e departamento para preservar todos os campos disponibilizados pela
+API.
+
+Execucao completa:
+
+```powershell
+python scripts\listar_movimentos_financeiros_omie.py
+```
+
+Teste de pagina unica:
+
+```powershell
+python scripts\listar_movimentos_financeiros_omie.py --pagina-inicial 1 --pagina-final 1
+```
+
 ## `setup_ambiente_python.ps1`
 
 Cria o ambiente virtual `.venv` e instala as dependencias do `requirements.txt`.
